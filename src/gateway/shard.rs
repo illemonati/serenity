@@ -8,6 +8,7 @@ use model::{
 };
 use parking_lot::Mutex;
 use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
     sync::Arc,
     time::{Duration as StdDuration, Instant}
 };
@@ -138,7 +139,9 @@ impl Shard {
     ) -> Result<Shard> {
         let mut client = connect(&*ws_url.lock())?;
 
-        let _ = set_client_timeout(&mut client);
+        if let Err(why) = set_client_timeout(&mut client) {
+            warn!("[Shard {:?}] Error setting timeout: {:?}", shard_info, why);
+        }
 
         let current_presence = (None, OnlineStatus::Online);
         let heartbeat_instants = (None, None);
@@ -170,6 +173,7 @@ impl Shard {
     pub fn current_presence(&self) -> &CurrentPresence {
         &self.current_presence
     }
+
     /// Whether the shard has permanently shutdown.
     ///
     /// This should normally happen due to manual calling of [`shutdown`] or
@@ -215,10 +219,14 @@ impl Shard {
     ///
     /// [`GatewayError::HeartbeatFailed`]: enum.GatewayError.html#variant.HeartbeatFailed
     pub fn heartbeat(&mut self) -> Result<()> {
+        trace!("[Shard {:?}] Heartbeating; state: {:?}", self.shard_info, self);
+
         match self.client.send_heartbeat(&self.shard_info, Some(self.seq)) {
             Ok(()) => {
                 self.heartbeat_instants.0 = Some(Instant::now());
                 self.last_heartbeat_acknowledged = false;
+
+                trace!("[Shard {:?}] Heartbeated; state: {:?}", self.shard_info, self);
 
                 Ok(())
             },
@@ -282,11 +290,15 @@ impl Shard {
     /// ```
     #[inline]
     pub fn set_game(&mut self, game: Option<Game>) {
+        trace!("[Shard {:?}] Setting game: {:?}", self.shard_info, game);
+
         self.current_presence.0 = game;
     }
 
     #[inline]
     pub fn set_presence(&mut self, status: OnlineStatus, game: Option<Game>) {
+        trace!("[Shard {:?}] Setting presence: {:?}", self.shard_info, game);
+
         self.set_game(game);
         self.set_status(status);
     }
@@ -296,6 +308,8 @@ impl Shard {
         if status == OnlineStatus::Offline {
             status = OnlineStatus::Invisible;
         }
+
+        trace!("[Shard {:?}] Setting status: {:?}", self.shard_info, status);
 
         self.current_presence.1 = status;
     }
@@ -364,6 +378,9 @@ impl Shard {
     #[allow(cyclomatic_complexity)]
     pub(crate) fn handle_event(&mut self, event: &Result<GatewayEvent>)
         -> Result<Option<ShardAction>> {
+        trace!("[Shard {:?}] Handling event: {:?}", self.shard_info, event);
+        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+
         match *event {
             Ok(GatewayEvent::Dispatch(seq, ref event)) => {
                 if seq > self.seq + 1 {
@@ -402,15 +419,21 @@ impl Shard {
                         s,
                         self.seq
                     );
+                    trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
                     if self.stage == ConnectionStage::Handshake {
+                        trace!(
+                            "[Shard {:?}] Received heartbeat; now in identifying stage",
+                            self.shard_info,
+                        );
+
                         self.stage = ConnectionStage::Identifying;
 
                         return Ok(Some(ShardAction::Identify));
                     } else {
                         warn!(
                             "[Shard {:?}] Heartbeat during non-Handshake; auto-reconnecting",
-                            self.shard_info
+                            self.shard_info,
                         );
 
                         return Ok(Some(ShardAction::Reconnect(self.reconnection_type())));
@@ -423,7 +446,11 @@ impl Shard {
                 self.heartbeat_instants.1 = Some(Instant::now());
                 self.last_heartbeat_acknowledged = true;
 
-                trace!("[Shard {:?}] Received heartbeat ack", self.shard_info);
+                trace!(
+                    "[Shard {:?}] Received heartbeat ack; state: {:?}",
+                    self.shard_info,
+                    self,
+                );
 
                 Ok(None)
             },
@@ -431,6 +458,7 @@ impl Shard {
                 debug!("[Shard {:?}] Received a Hello; interval: {}",
                        self.shard_info,
                        interval);
+                trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
                 if self.stage == ConnectionStage::Resuming {
                     return Ok(None);
@@ -454,6 +482,7 @@ impl Shard {
                     "[Shard {:?}] Received session invalidation",
                     self.shard_info,
                 );
+                trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
                 Ok(Some(if resumable {
                     ShardAction::Reconnect(ReconnectType::Resume)
@@ -462,9 +491,22 @@ impl Shard {
                 }))
             },
             Ok(GatewayEvent::Reconnect) => {
+                trace!(
+                    "[Shard {:?}] Received reconnect; state: {:?}",
+                    self.shard_info,
+                    self,
+                );
+
                 Ok(Some(ShardAction::Reconnect(ReconnectType::Reidentify)))
             },
             Err(Error::Gateway(GatewayError::Closed(ref data))) => {
+                trace!(
+                    "[Shard {:?}] Received close: {:?}; state: {:?}",
+                    self.shard_info,
+                    data,
+                    self,
+                );
+
                 let num = data.as_ref().map(|d| d.status_code);
                 let clean = num == Some(1000);
 
@@ -543,6 +585,13 @@ impl Shard {
                 }))
             },
             Err(Error::WebSocket(ref why)) => {
+                trace!(
+                    "[Shard {:?}] ws err: {:?}; state: {:?}",
+                    self.shard_info,
+                    why,
+                    self,
+                );
+
                 if let WebSocketError::NoDataAvailable = *why {
                     if self.heartbeat_instants.1.is_none() {
                         return Ok(None);
@@ -575,10 +624,22 @@ impl Shard {
     /// - a heartbeat acknowledgement was not received in time
     /// - an error occurred while heartbeating
     pub fn check_heartbeat(&mut self) -> bool {
+        trace!(
+            "[Shard {:?}] Checking heartbeat; state: {:?}",
+            self.shard_info,
+            self,
+        );
+
         let wait = {
             let heartbeat_interval = match self.heartbeat_interval {
                 Some(heartbeat_interval) => heartbeat_interval,
                 None => {
+                    trace!(
+                        "[Shard {:?}] Checking heartbeat; no interval; elapsed diff: {:?}",
+                        self.shard_info,
+                        self.started.elapsed() < StdDuration::from_secs(15),
+                    );
+
                     return self.started.elapsed() < StdDuration::from_secs(15);
                 },
             };
@@ -586,10 +647,24 @@ impl Shard {
             StdDuration::from_secs(heartbeat_interval / 1000)
         };
 
+        trace!(
+            "[Shard {:?}] Checking heartbeat; wait: {:?}",
+            self.shard_info,
+            wait,
+        );
+
         // If a duration of time less than the heartbeat_interval has passed,
         // then don't perform a keepalive or attempt to reconnect.
         if let Some(last_sent) = self.heartbeat_instants.0 {
-            if last_sent.elapsed() <= wait {
+            let elapsed = last_sent.elapsed();
+
+            if elapsed <= wait {
+                trace!(
+                    "[Shard {:?}] Last sent elapsed: {:?}",
+                    self.shard_info,
+                    elapsed,
+                );
+
                 return true;
             }
         }
@@ -601,17 +676,22 @@ impl Shard {
                 "[Shard {:?}] Last heartbeat not acknowledged",
                 self.shard_info,
             );
+            trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
             return false;
+        } else {
+            trace!("[Shard {:?}] Last heartbeat acknowledged", self.shard_info);
         }
 
         // Otherwise, we're good to heartbeat.
         if let Err(why) = self.heartbeat() {
             warn!("[Shard {:?}] Err heartbeating: {:?}", self.shard_info, why);
+            trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
             false
         } else {
             trace!("[Shard {:?}] Heartbeated", self.shard_info);
+            trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
             true
         }
@@ -621,6 +701,12 @@ impl Shard {
     // Shamelessly stolen from brayzure's commit in eris:
     // <https://github.com/abalabahaha/eris/commit/0ce296ae9a542bcec0edf1c999ee2d9986bed5a6>
     pub fn latency(&self) -> Option<StdDuration> {
+        trace!(
+            "[Shard {:?}] Getting latency; state: {:?}",
+            self.shard_info,
+            self,
+        );
+
         if let (Some(sent), Some(received)) = self.heartbeat_instants {
             if received > sent {
                 return Some(received - sent);
@@ -758,10 +844,13 @@ impl Shard {
     // - the time that the last heartbeat sent as being now
     // - the `stage` to `Identifying`
     pub fn identify(&mut self) -> Result<()> {
+        trace!("[Shard {:?}] Identifying; state: {:?}", self.shard_info, self);
         self.client.send_identify(&self.shard_info, &self.token.lock())?;
 
         self.heartbeat_instants.0 = Some(Instant::now());
         self.stage = ConnectionStage::Identifying;
+
+        trace!("[Shard {:?}] Identified; state: {:?}", self.shard_info, self);
 
         Ok(())
     }
@@ -772,6 +861,7 @@ impl Shard {
     /// the client.
     pub fn initialize(&mut self) -> Result<WsClient> {
         debug!("[Shard {:?}] Initializing", self.shard_info);
+        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
         // We need to do two, sort of three things here:
         //
@@ -786,22 +876,35 @@ impl Shard {
         let mut client = connect(&self.ws_url.lock())?;
         self.stage = ConnectionStage::Handshake;
 
-        let _ = set_client_timeout(&mut client);
+        if let Err(why) = set_client_timeout(&mut client) {
+            warn!(
+                "[Shard {:?}] Error setting timeouts when initializing: {:?}",
+                self.shard_info,
+                why,
+            );
+        }
+
+        trace!("[Shard {:?}] Initialized; state: {:?}", self.shard_info, self);
 
         Ok(client)
     }
 
     pub fn reset(&mut self) {
+        trace!("[Shard {:?}] Resetting; state: {:?}", self.shard_info, self);
+
         self.heartbeat_instants = (Some(Instant::now()), None);
         self.heartbeat_interval = None;
         self.last_heartbeat_acknowledged = true;
         self.session_id = None;
         self.stage = ConnectionStage::Disconnected;
         self.seq = 0;
+
+        trace!("[Shard {:?}] Reset; state: {:?}", self.shard_info, self);
     }
 
     pub fn resume(&mut self) -> Result<()> {
         debug!("Shard {:?}] Attempting to resume", self.shard_info);
+        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
         self.client = self.initialize()?;
         self.stage = ConnectionStage::Resuming;
@@ -821,6 +924,7 @@ impl Shard {
 
     pub fn reconnect(&mut self) -> Result<()> {
         info!("[Shard {:?}] Attempting to reconnect", self.shard_info());
+        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
 
         self.reset();
         self.client = self.initialize()?;
@@ -833,6 +937,26 @@ impl Shard {
             &self.shard_info,
             &self.current_presence,
         )
+    }
+}
+
+impl Debug for Shard {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        f.debug_struct("Shard")
+            .field("client", &"WebSocket client")
+            .field("current_presence", &self.current_presence)
+            .field("heartbeat_instants", &self.heartbeat_instants)
+            .field("heartbeat_interval", &self.heartbeat_interval)
+            .field("last_heartbeat_acknowledged", &self.last_heartbeat_acknowledged)
+            .field("seq", &self.seq)
+            .field("session_id", &self.session_id)
+            .field("shard_info", &self.shard_info)
+            .field("shutdown", &self.shutdown)
+            .field("stage", &self.stage)
+            .field("started", &self.started)
+            .field("token", &self.token)
+            .field("ws_url", &self.ws_url)
+            .finish()
     }
 }
 

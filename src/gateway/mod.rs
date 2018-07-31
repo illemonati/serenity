@@ -185,6 +185,7 @@ pub enum InterMessage {
     Json(Value),
 }
 
+#[derive(Clone, Debug)]
 pub enum ShardAction {
     Heartbeat,
     Identify,
@@ -192,6 +193,7 @@ pub enum ShardAction {
 }
 
 /// The type of reconnection that should be performed.
+#[derive(Clone, Debug)]
 pub enum ReconnectType {
     /// Indicator that a new connection should be made by sending an IDENTIFY.
     Reidentify,

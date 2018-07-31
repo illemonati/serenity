@@ -51,6 +51,7 @@ fn context(
     Context::new(Arc::clone(data), runner_tx.clone(), shard_id)
 }
 
+#[derive(Debug)]
 pub(crate) enum DispatchEvent {
     Client(ClientEvent),
     Model(Event),
