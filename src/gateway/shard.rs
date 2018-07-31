@@ -171,6 +171,9 @@ impl Shard {
     /// Retrieves the current presence of the shard.
     #[inline]
     pub fn current_presence(&self) -> &CurrentPresence {
+        trace!("[Shard {:?}] Getting current presence", self.shard_info);
+        trace!("[Shard {:?}] State0: {:?}", self.shard_info, self);
+
         &self.current_presence
     }
 
@@ -183,6 +186,9 @@ impl Shard {
     /// [`shutdown_clean`]: #method.shutdown_clean
     #[inline]
     pub fn is_shutdown(&self) -> bool {
+        trace!("[Shard {:?}] Getting whether shutdown", self.shard_info);
+        trace!("[Shard {:?}] State01: {:?}", self.shard_info, self);
+
         self.shutdown
     }
 
@@ -192,18 +198,27 @@ impl Shard {
     /// acknowledgement was last received.
     #[inline]
     pub fn heartbeat_instants(&self) -> &(Option<Instant>, Option<Instant>) {
+        trace!("[Shard {:?}] Getting heartbeat instants", self.shard_info);
+        trace!("[Shard {:?}] State02: {:?}", self.shard_info, self);
+
         &self.heartbeat_instants
     }
 
     /// Retrieves the value of when the last heartbeat was sent.
     #[inline]
     pub fn last_heartbeat_sent(&self) -> Option<&Instant> {
+        trace!("[Shard {:?}] Getting last heartbeat sent", self.shard_info);
+        trace!("[Shard {:?}] State03: {:?}", self.shard_info, self);
+
         self.heartbeat_instants.0.as_ref()
     }
 
     /// Retrieves the value of when the last heartbeat ack was received.
     #[inline]
     pub fn last_heartbeat_ack(&self) -> Option<&Instant> {
+        trace!("[Shard {:?}] Getting last heartbeat ack", self.shard_info);
+        trace!("[Shard {:?}] State04: {:?}", self.shard_info, self);
+
         self.heartbeat_instants.1.as_ref()
     }
 
@@ -219,14 +234,16 @@ impl Shard {
     ///
     /// [`GatewayError::HeartbeatFailed`]: enum.GatewayError.html#variant.HeartbeatFailed
     pub fn heartbeat(&mut self) -> Result<()> {
-        trace!("[Shard {:?}] Heartbeating; state: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] Heartbeating", self.shard_info);
+        trace!("[Shard {:?}] State05: {:?}", self.shard_info, self);
 
         match self.client.send_heartbeat(&self.shard_info, Some(self.seq)) {
             Ok(()) => {
                 self.heartbeat_instants.0 = Some(Instant::now());
                 self.last_heartbeat_acknowledged = false;
 
-                trace!("[Shard {:?}] Heartbeated; state: {:?}", self.shard_info, self);
+                trace!("[Shard {:?}] Heartbeated", self.shard_info);
+                trace!("[Shard {:?}] State06: {:?}", self.shard_info, self);
 
                 Ok(())
             },
@@ -251,21 +268,33 @@ impl Shard {
 
     #[inline]
     pub fn heartbeat_interval(&self) -> Option<&u64> {
+        trace!("[Shard {:?}] Getting heartbeat interval", self.shard_info);
+        trace!("[Shard {:?}] State07: {:?}", self.shard_info, self);
+
         self.heartbeat_interval.as_ref()
     }
 
     #[inline]
     pub fn last_heartbeat_acknowledged(&self) -> bool {
+        trace!("[Shard {:?}] Getting last heartbeat ack", self.shard_info);
+        trace!("[Shard {:?}] State08: {:?}", self.shard_info, self);
+
         self.last_heartbeat_acknowledged
     }
 
     #[inline]
     pub fn seq(&self) -> u64 {
+        trace!("[Shard {:?}] Getting seq", self.shard_info);
+        trace!("[Shard {:?}] State09: {:?}", self.shard_info, self);
+
         self.seq
     }
 
     #[inline]
     pub fn session_id(&self) -> Option<&String> {
+        trace!("[Shard {:?}] Getting session_id", self.shard_info);
+        trace!("[Shard {:?}] State10: {:?}", self.shard_info, self);
+
         self.session_id.as_ref()
     }
 
@@ -291,6 +320,7 @@ impl Shard {
     #[inline]
     pub fn set_game(&mut self, game: Option<Game>) {
         trace!("[Shard {:?}] Setting game: {:?}", self.shard_info, game);
+        trace!("[Shard {:?}] State11: {:?}", self.shard_info, self);
 
         self.current_presence.0 = game;
     }
@@ -298,6 +328,7 @@ impl Shard {
     #[inline]
     pub fn set_presence(&mut self, status: OnlineStatus, game: Option<Game>) {
         trace!("[Shard {:?}] Setting presence: {:?}", self.shard_info, game);
+        trace!("[Shard {:?}] State12: {:?}", self.shard_info, self);
 
         self.set_game(game);
         self.set_status(status);
@@ -310,6 +341,7 @@ impl Shard {
         }
 
         trace!("[Shard {:?}] Setting status: {:?}", self.shard_info, status);
+        trace!("[Shard {:?}] State13: {:?}", self.shard_info, self);
 
         self.current_presence.1 = status;
     }
@@ -344,10 +376,17 @@ impl Shard {
     /// # #[cfg(not(feature = "model"))]
     /// # fn main() {}
     /// ```
-    pub fn shard_info(&self) -> [u64; 2] { self.shard_info }
+    pub fn shard_info(&self) -> [u64; 2] {
+        trace!("[Shard {:?}] Getting shard info", self.shard_info);
+        trace!("[Shard {:?}] State14: {:?}", self.shard_info, self);
+        self.shard_info
+    }
 
     /// Returns the current connection stage of the shard.
     pub fn stage(&self) -> ConnectionStage {
+        trace!("[Shard {:?}] Getting stage", self.shard_info);
+        trace!("[Shard {:?}] State15: {:?}", self.shard_info, self);
+
         self.stage
     }
 
@@ -379,7 +418,7 @@ impl Shard {
     pub(crate) fn handle_event(&mut self, event: &Result<GatewayEvent>)
         -> Result<Option<ShardAction>> {
         trace!("[Shard {:?}] Handling event: {:?}", self.shard_info, event);
-        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] State16: {:?}", self.shard_info, self);
 
         match *event {
             Ok(GatewayEvent::Dispatch(seq, ref event)) => {
@@ -419,7 +458,7 @@ impl Shard {
                         s,
                         self.seq
                     );
-                    trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+                    trace!("[Shard {:?}] State17: {:?}", self.shard_info, self);
 
                     if self.stage == ConnectionStage::Handshake {
                         trace!(
@@ -446,11 +485,8 @@ impl Shard {
                 self.heartbeat_instants.1 = Some(Instant::now());
                 self.last_heartbeat_acknowledged = true;
 
-                trace!(
-                    "[Shard {:?}] Received heartbeat ack; state: {:?}",
-                    self.shard_info,
-                    self,
-                );
+                trace!("[Shard {:?}] Received heartbeat ack", self.shard_info);
+                trace!("[Shard {:?}] State18: {:?}", self.shard_info, self);
 
                 Ok(None)
             },
@@ -458,7 +494,7 @@ impl Shard {
                 debug!("[Shard {:?}] Received a Hello; interval: {}",
                        self.shard_info,
                        interval);
-                trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+                trace!("[Shard {:?}] State19: {:?}", self.shard_info, self);
 
                 if self.stage == ConnectionStage::Resuming {
                     return Ok(None);
@@ -482,7 +518,7 @@ impl Shard {
                     "[Shard {:?}] Received session invalidation",
                     self.shard_info,
                 );
-                trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+                trace!("[Shard {:?}] State20: {:?}", self.shard_info, self);
 
                 Ok(Some(if resumable {
                     ShardAction::Reconnect(ReconnectType::Resume)
@@ -491,21 +527,17 @@ impl Shard {
                 }))
             },
             Ok(GatewayEvent::Reconnect) => {
-                trace!(
-                    "[Shard {:?}] Received reconnect; state: {:?}",
-                    self.shard_info,
-                    self,
-                );
+                trace!("[Shard {:?}] Received reconnect", self.shard_info);
+                trace!("[Shard {:?}] State21: {:?}", self.shard_info, self);
 
                 Ok(Some(ShardAction::Reconnect(ReconnectType::Reidentify)))
             },
             Err(Error::Gateway(GatewayError::Closed(ref data))) => {
-                trace!(
-                    "[Shard {:?}] Received close: {:?}; state: {:?}",
+                trace!("[Shard {:?}] Received close: {:?}",
                     self.shard_info,
                     data,
-                    self,
                 );
+                trace!("[Shard {:?}] State22: {:?}", self.shard_info, self);
 
                 let num = data.as_ref().map(|d| d.status_code);
                 let clean = num == Some(1000);
@@ -585,12 +617,8 @@ impl Shard {
                 }))
             },
             Err(Error::WebSocket(ref why)) => {
-                trace!(
-                    "[Shard {:?}] ws err: {:?}; state: {:?}",
-                    self.shard_info,
-                    why,
-                    self,
-                );
+                trace!("[Shard {:?}] ws err: {:?}", self.shard_info, why);
+                trace!("[Shard {:?}] State23: {:?}", self.shard_info, self);
 
                 if let WebSocketError::NoDataAvailable = *why {
                     if self.heartbeat_instants.1.is_none() {
@@ -624,11 +652,8 @@ impl Shard {
     /// - a heartbeat acknowledgement was not received in time
     /// - an error occurred while heartbeating
     pub fn check_heartbeat(&mut self) -> bool {
-        trace!(
-            "[Shard {:?}] Checking heartbeat; state: {:?}",
-            self.shard_info,
-            self,
-        );
+        trace!("[Shard {:?}] Checking heartbeat", self.shard_info);
+        trace!("[Shard {:?}] State24: {:?}", self.shard_info, self);
 
         let wait = {
             let heartbeat_interval = match self.heartbeat_interval {
@@ -676,7 +701,7 @@ impl Shard {
                 "[Shard {:?}] Last heartbeat not acknowledged",
                 self.shard_info,
             );
-            trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+            trace!("[Shard {:?}] State25: {:?}", self.shard_info, self);
 
             return false;
         } else {
@@ -686,12 +711,12 @@ impl Shard {
         // Otherwise, we're good to heartbeat.
         if let Err(why) = self.heartbeat() {
             warn!("[Shard {:?}] Err heartbeating: {:?}", self.shard_info, why);
-            trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+            trace!("[Shard {:?}] State26: {:?}", self.shard_info, self);
 
             false
         } else {
             trace!("[Shard {:?}] Heartbeated", self.shard_info);
-            trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+            trace!("[Shard {:?}] State27: {:?}", self.shard_info, self);
 
             true
         }
@@ -701,11 +726,8 @@ impl Shard {
     // Shamelessly stolen from brayzure's commit in eris:
     // <https://github.com/abalabahaha/eris/commit/0ce296ae9a542bcec0edf1c999ee2d9986bed5a6>
     pub fn latency(&self) -> Option<StdDuration> {
-        trace!(
-            "[Shard {:?}] Getting latency; state: {:?}",
-            self.shard_info,
-            self,
-        );
+        trace!("[Shard {:?}] Getting latency", self.shard_info);
+        trace!("[Shard {:?}] State28: {:?}", self.shard_info, self);
 
         if let (Some(sent), Some(received)) = self.heartbeat_instants {
             if received > sent {
@@ -729,6 +751,9 @@ impl Shard {
     /// [`ConnectionStage::Connecting`]: ../../../gateway/enum.ConnectionStage.html#variant.Connecting
     /// [`session_id`]: ../../../gateway/struct.Shard.html#method.session_id
     pub fn should_reconnect(&mut self) -> Option<ReconnectType> {
+        trace!("[Shard {:?}] Should reconnect?", self.shard_info);
+        trace!("[Shard {:?}] State29: {:?}", self.shard_info, self);
+
         if self.stage == ConnectionStage::Connecting {
             return None;
         }
@@ -737,6 +762,9 @@ impl Shard {
     }
 
     pub fn reconnection_type(&self) -> ReconnectType {
+        trace!("[Shard {:?}] Reconnection type", self.shard_info);
+        trace!("[Shard {:?}] State30: {:?}", self.shard_info, self);
+
         if self.session_id().is_some() {
             ReconnectType::Resume
         } else {
@@ -830,6 +858,7 @@ impl Shard {
         query: Option<&str>,
     ) -> Result<()> where It: IntoIterator<Item=GuildId> {
         debug!("[Shard {:?}] Requesting member chunks", self.shard_info);
+        trace!("[Shard {:?}] State31: {:?}", self.shard_info, self);
 
         self.client.send_chunk_guilds(
             guild_ids,
@@ -844,13 +873,16 @@ impl Shard {
     // - the time that the last heartbeat sent as being now
     // - the `stage` to `Identifying`
     pub fn identify(&mut self) -> Result<()> {
-        trace!("[Shard {:?}] Identifying; state: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] Identifying", self.shard_info);
+        trace!("[Shard {:?}] State32: {:?}", self.shard_info, self);
+
         self.client.send_identify(&self.shard_info, &self.token.lock())?;
 
         self.heartbeat_instants.0 = Some(Instant::now());
         self.stage = ConnectionStage::Identifying;
 
-        trace!("[Shard {:?}] Identified; state: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] Identified", self.shard_info);
+        trace!("[Shard {:?}] State33: {:?}", self.shard_info, self);
 
         Ok(())
     }
@@ -861,7 +893,7 @@ impl Shard {
     /// the client.
     pub fn initialize(&mut self) -> Result<WsClient> {
         debug!("[Shard {:?}] Initializing", self.shard_info);
-        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] State34: {:?}", self.shard_info, self);
 
         // We need to do two, sort of three things here:
         //
@@ -884,13 +916,15 @@ impl Shard {
             );
         }
 
-        trace!("[Shard {:?}] Initialized; state: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] Initialized", self.shard_info);
+        trace!("[Shard {:?}] State35: {:?}", self.shard_info, self);
 
         Ok(client)
     }
 
     pub fn reset(&mut self) {
-        trace!("[Shard {:?}] Resetting; state: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] Resetting", self.shard_info);
+        trace!("[Shard {:?}] State36: {:?}", self.shard_info, self);
 
         self.heartbeat_instants = (Some(Instant::now()), None);
         self.heartbeat_interval = None;
@@ -899,12 +933,13 @@ impl Shard {
         self.stage = ConnectionStage::Disconnected;
         self.seq = 0;
 
-        trace!("[Shard {:?}] Reset; state: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] Reset", self.shard_info);
+        trace!("[Shard {:?}] State37: {:?}", self.shard_info, self);
     }
 
     pub fn resume(&mut self) -> Result<()> {
         debug!("Shard {:?}] Attempting to resume", self.shard_info);
-        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] State38: {:?}", self.shard_info, self);
 
         self.client = self.initialize()?;
         self.stage = ConnectionStage::Resuming;
@@ -924,7 +959,7 @@ impl Shard {
 
     pub fn reconnect(&mut self) -> Result<()> {
         info!("[Shard {:?}] Attempting to reconnect", self.shard_info());
-        trace!("[Shard {:?}] State: {:?}", self.shard_info, self);
+        trace!("[Shard {:?}] State39: {:?}", self.shard_info, self);
 
         self.reset();
         self.client = self.initialize()?;
@@ -933,6 +968,8 @@ impl Shard {
     }
 
     pub fn update_presence(&mut self) -> Result<()> {
+        trace!("[Shard {:?}] Updating presence", self.shard_info);
+        trace!("[Shard {:?}] State40: {:?}", self.shard_info, self);
         self.client.send_presence_update(
             &self.shard_info,
             &self.current_presence,
@@ -943,7 +980,7 @@ impl Shard {
 impl Debug for Shard {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         f.debug_struct("Shard")
-            .field("client", &"WebSocket client")
+            .field("client", self.client.stream_ref())
             .field("current_presence", &self.current_presence)
             .field("heartbeat_instants", &self.heartbeat_instants)
             .field("heartbeat_interval", &self.heartbeat_interval)
